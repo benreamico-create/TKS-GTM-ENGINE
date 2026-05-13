@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TKS Signal Engine</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .score-ring {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.9rem;
+    }
+    .fade-in { animation: fadeIn 0.3s ease-in; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .spinner {
+      border: 3px solid #e5e7eb;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      width: 20px; height: 20px;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 50; padding: 1rem;
+    }
+    .pulse-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #22c55e;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
+    }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+
+  <!-- Header -->
+  <header class="border-b border-gray-800 px-8 py-5 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">T</div>
+      <div>
+        <h1 class="text-lg font-semibold tracking-tight">TKS Signal Engine</h1>
+        <p class="text-xs text-gray-500">Ambitious student discovery — Canada &amp; US tech cities</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-4">
+      <div id="scan-status" class="flex items-center gap-2 text-xs text-gray-500">
+        <div class="pulse-dot"></div>
+        <span>Ready</span>
+      </div>
+      <button
+        id="scan-btn"
+        onclick="triggerScan()"
+        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors"
+      >
+        Run Scan
+      </button>
+    </div>
+  </header>
+
+  <!-- Stats Bar -->
+  <div class="px-8 py-5 border-b border-gray-800 grid grid-cols-3 gap-6 max-w-3xl">
+    <div>
+      <div id="stat-total" class="text-3xl font-bold text-white">—</div>
+      <div class="text-xs text-gray-500 mt-1">Students found</div>
+    </div>
+    <div>
+      <div id="stat-quality" class="text-3xl font-bold text-indigo-400">—</div>
+      <div class="text-xs text-gray-500 mt-1">High-fit candidates (score ≥ 6)</div>
+    </div>
+    <div>
+      <div id="stat-sources" class="text-3xl font-bold text-emerald-400">2</div>
+      <div class="text-xs text-gray-500 mt-1">Active sources</div>
+    </div>
+  </div>
+
+  <!-- How it works banner -->
+  <div class="px-8 py-4 bg-gray-900 border-b border-gray-800 flex items-center gap-8 text-xs text-gray-400 overflow-x-auto">
+    <div class="flex items-center gap-2 whitespace-nowrap">
+      <span class="w-6 h-6 rounded-full bg-indigo-900 text-indigo-300 flex items-center justify-center font-bold text-xs">1</span>
+      <span><strong class="text-gray-300">Find</strong> — scrapes GitHub &amp; Devpost for students already building</span>
+    </div>
+    <span class="text-gray-700">→</span>
+    <div class="flex items-center gap-2 whitespace-nowrap">
+      <span class="w-6 h-6 rounded-full bg-indigo-900 text-indigo-300 flex items-center justify-center font-bold text-xs">2</span>
+      <span><strong class="text-gray-300">Score</strong> — Claude rates TKS fit 0–10 based on their actual work</span>
+    </div>
+    <span class="text-gray-700">→</span>
+    <div class="flex items-center gap-2 whitespace-nowrap">
+      <span class="w-6 h-6 rounded-full bg-indigo-900 text-indigo-300 flex items-center justify-center font-bold text-xs">3</span>
+      <span><strong class="text-gray-300">Reach out</strong> — Claude writes a personalized email referencing their project</span>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <main class="px-8 py-6">
+
+    <!-- Empty state -->
+    <div id="empty-state" class="hidden text-center py-24">
+      <div class="text-5xl mb-4">🔍</div>
+      <h2 class="text-xl font-semibold text-gray-300 mb-2">No signals yet</h2>
+      <p class="text-gray-500 text-sm mb-6">Click <strong>Run Scan</strong> to start finding students from GitHub and Devpost across tech cities in Canada and the US.</p>
+      <button onclick="triggerScan()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors">
+        Run First Scan
+      </button>
+    </div>
+
+    <!-- Loading state -->
+    <div id="loading-state" class="hidden text-center py-24">
+      <div class="spinner mx-auto mb-4" style="width:36px;height:36px;border-width:4px"></div>
+      <p class="text-gray-400 text-sm">Scanning GitHub &amp; Devpost...</p>
+      <p class="text-gray-600 text-xs mt-2">This takes about 30–60 seconds</p>
+    </div>
+
+    <!-- Signal grid -->
+    <div id="signal-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+  </main>
+
+  <!-- Email Draft Modal -->
+  <div id="modal" class="modal-backdrop hidden" onclick="closeModal(event)">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl max-w-xl w-full p-6 shadow-2xl" onclick="event.stopPropagation()">
+      <div class="flex items-start justify-between mb-4">
+        <div>
+          <h3 id="modal-name" class="text-lg font-semibold"></h3>
+          <p id="modal-meta" class="text-xs text-gray-500 mt-0.5"></p>
+        </div>
+        <button onclick="closeModal()" class="text-gray-500 hover:text-gray-300 text-xl leading-none">×</button>
+      </div>
+
+      <div id="modal-profile" class="mb-4 p-3 bg-gray-800 rounded-lg text-xs text-gray-400 space-y-1"></div>
+
+      <div class="mb-3 flex items-center justify-between">
+        <span class="text-sm font-medium text-gray-300">Outreach Email</span>
+        <button id="copy-btn" onclick="copyEmail()" class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Copy</button>
+      </div>
+
+      <div id="modal-draft-loading" class="hidden text-center py-6">
+        <div class="spinner mx-auto mb-2"></div>
+        <p class="text-xs text-gray-500">Claude is drafting a personalized email...</p>
+      </div>
+
+      <div
+        id="modal-draft"
+        class="p-4 bg-gray-800 rounded-lg text-sm text-gray-200 leading-relaxed whitespace-pre-wrap min-h-[100px]"
+      ></div>
+
+      <div class="mt-4 flex gap-2">
+        <a id="modal-github" href="#" target="_blank"
+           class="flex-1 text-center px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs rounded-lg transition-colors">
+          View GitHub →
+        </a>
+        <a id="modal-project" href="#" target="_blank"
+           class="flex-1 text-center px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs rounded-lg transition-colors hidden">
+          View Project →
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let signals = [];
+    let currentSignalId = null;
+    let pollInterval = null;
+
+    function scoreColor(score) {
+      if (score >= 8) return { bg: 'bg-emerald-900', text: 'text-emerald-300', border: 'border-emerald-700' };
+      if (score >= 6) return { bg: 'bg-indigo-900', text: 'text-indigo-300', border: 'border-indigo-700' };
+      if (score >= 4) return { bg: 'bg-yellow-900', text: 'text-yellow-300', border: 'border-yellow-700' };
+      return { bg: 'bg-gray-800', text: 'text-gray-400', border: 'border-gray-700' };
+    }
+
+    function sourceLabel(source) {
+      const map = { github: { label: 'GitHub', color: 'bg-gray-700 text-gray-300' }, devpost: { label: 'Devpost', color: 'bg-blue-900 text-blue-300' } };
+      return map[source] || { label: source, color: 'bg-gray-700 text-gray-300' };
+    }
+
+    function renderSignals(data) {
+      const grid = document.getElementById('signal-grid');
+      const empty = document.getElementById('empty-state');
+      const loading = document.getElementById('loading-state');
+
+      document.getElementById('stat-total').textContent = data.total;
+      document.getElementById('stat-quality').textContent = data.high_quality;
+
+      if (data.total === 0) {
+        grid.innerHTML = '';
+        empty.classList.remove('hidden');
+        loading.classList.add('hidden');
+        return;
+      }
+
+      empty.classList.add('hidden');
+      loading.classList.add('hidden');
+
+      grid.innerHTML = data.signals.map(s => {
+        const score = s.relevance_score ?? 0;
+        const c = scoreColor(score);
+        const src = sourceLabel(s.source);
+        const location = s.location ? `<span class="text-gray-500">📍 ${s.location}</span>` : '';
+        const project = s.project_name ? `<p class="text-gray-400 text-xs mt-1 truncate">${s.project_name}</p>` : '';
+        const reason = s.score_reason ? `<p class="text-gray-500 text-xs mt-2 italic">"${s.score_reason}"</p>` : '';
+
+        return `
+          <div
+            class="bg-gray-900 border border-gray-800 rounded-xl p-4 cursor-pointer hover:border-indigo-700 transition-colors fade-in"
+            onclick="openModal('${s.id}')"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="px-2 py-0.5 rounded text-xs font-medium ${src.color}">${src.label}</span>
+                  ${location}
+                </div>
+                <h3 class="font-semibold text-white truncate">${s.name}</h3>
+                ${project}
+                ${reason}
+              </div>
+              <div class="score-ring ${c.bg} ${c.text} border ${c.border} flex-shrink-0">
+                ${score.toFixed(1)}
+              </div>
+            </div>
+            <div class="mt-3 pt-3 border-t border-gray-800 flex items-center justify-between">
+              <span class="text-xs text-gray-600">${s.competition || '—'}</span>
+              <span class="text-xs text-indigo-400 hover:text-indigo-300">Generate email →</span>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    async function loadSignals() {
+      try {
+        const res = await fetch('/api/signals');
+        const data = await res.json();
+        signals = data.signals;
+        renderSignals(data);
+      } catch (e) {
+        console.error('Failed to load signals', e);
+      }
+    }
+
+    async function triggerScan() {
+      const btn = document.getElementById('scan-btn');
+      const status = document.getElementById('scan-status');
+      btn.disabled = true;
+      btn.textContent = 'Scanning...';
+      document.getElementById('loading-state').classList.remove('hidden');
+      document.getElementById('empty-state').classList.add('hidden');
+      document.getElementById('signal-grid').innerHTML = '';
+
+      try {
+        await fetch('/api/scan', { method: 'POST' });
+        status.innerHTML = '<div class="pulse-dot" style="background:#f59e0b"></div><span>Scanning...</span>';
+
+        pollInterval = setInterval(async () => {
+          const r = await fetch('/api/scan/status');
+          const d = await r.json();
+          if (!d.running) {
+            clearInterval(pollInterval);
+            btn.disabled = false;
+            btn.textContent = 'Run Scan';
+            status.innerHTML = '<div class="pulse-dot"></div><span>Ready</span>';
+            await loadSignals();
+          }
+        }, 3000);
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Run Scan';
+        document.getElementById('loading-state').classList.add('hidden');
+      }
+    }
+
+    async function openModal(signalId) {
+      currentSignalId = signalId;
+      const signal = signals.find(s => s.id === signalId);
+      if (!signal) return;
+
+      document.getElementById('modal-name').textContent = signal.name;
+      document.getElementById('modal-meta').textContent =
+        `${sourceLabel(signal.source).label} · Score ${(signal.relevance_score ?? 0).toFixed(1)} / 10 · ${signal.location || 'Location unknown'}`;
+
+      const profile = [
+        signal.project_name && `<div><span class="text-gray-600">Project:</span> ${signal.project_name}</div>`,
+        signal.competition && `<div><span class="text-gray-600">Found via:</span> ${signal.competition}</div>`,
+        signal.project_description && `<div><span class="text-gray-600">Description:</span> ${signal.project_description.slice(0, 200)}${signal.project_description.length > 200 ? '...' : ''}</div>`,
+        signal.score_reason && `<div><span class="text-gray-600">Why scored:</span> ${signal.score_reason}</div>`,
+      ].filter(Boolean).join('');
+      document.getElementById('modal-profile').innerHTML = profile || '<div>Limited profile data available</div>';
+
+      const ghLink = document.getElementById('modal-github');
+      ghLink.href = signal.github_url || '#';
+      ghLink.classList.toggle('hidden', !signal.github_url);
+
+      const projLink = document.getElementById('modal-project');
+      if (signal.project_url) {
+        projLink.href = signal.project_url;
+        projLink.classList.remove('hidden');
+      } else {
+        projLink.classList.add('hidden');
+      }
+
+      document.getElementById('modal').classList.remove('hidden');
+      document.getElementById('modal-draft').textContent = '';
+      document.getElementById('copy-btn').textContent = 'Copy';
+
+      if (signal.email_draft) {
+        document.getElementById('modal-draft').textContent = signal.email_draft;
+      } else {
+        document.getElementById('modal-draft-loading').classList.remove('hidden');
+        document.getElementById('modal-draft').textContent = '';
+        try {
+          const res = await fetch(`/api/signals/${signalId}/draft`, { method: 'POST' });
+          const data = await res.json();
+          document.getElementById('modal-draft').textContent = data.draft;
+          const s = signals.find(x => x.id === signalId);
+          if (s) s.email_draft = data.draft;
+        } catch (e) {
+          document.getElementById('modal-draft').textContent = 'Failed to generate email draft.';
+        } finally {
+          document.getElementById('modal-draft-loading').classList.add('hidden');
+        }
+      }
+    }
+
+    function closeModal(event) {
+      if (!event || event.target === document.getElementById('modal')) {
+        document.getElementById('modal').classList.add('hidden');
+        currentSignalId = null;
+      }
+    }
+
+    async function copyEmail() {
+      const text = document.getElementById('modal-draft').textContent;
+      await navigator.clipboard.writeText(text);
+      const btn = document.getElementById('copy-btn');
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 2000);
+    }
+
+    // Initial load
+    loadSignals();
+  </script>
+</body>
+</html>

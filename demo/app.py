@@ -24,7 +24,7 @@ _scan_running = False
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
-    return Path("static/index.html").read_text()
+    return Path("static/index.html").read_text(encoding="utf-8")
 
 
 @app.get("/api/signals")

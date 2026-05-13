@@ -83,7 +83,14 @@ def score_signal(signal: dict) -> tuple[float, str]:
             max_tokens=80,
             messages=[{"role": "user", "content": SCORE_PROMPT.format(profile=profile)}],
         )
-        result = json.loads(resp.content[0].text.strip())
+        text = resp.content[0].text.strip()
+        # Strip markdown code fences if Claude wraps the JSON
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+            text = text.strip()
+        result = json.loads(text)
         return float(result["score"]), result.get("reason", "")
     except Exception as e:
         log.warning(f"Scoring failed for {signal.get('name')}: {e}")

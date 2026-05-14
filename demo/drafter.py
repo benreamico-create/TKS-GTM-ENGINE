@@ -18,19 +18,22 @@ def _get_client() -> anthropic.Anthropic:
 
 
 SCORE_PROMPT = """\
-You are evaluating whether a young person (ideally aged 13–17) is a strong fit for TKS \
-(The Knowledge Society) — a 10-month program for the world's most ambitious students who \
-want to work on hard problems in AI, biotech, climate, and other frontier areas. Alumni \
-have published research, built companies, and worked at top tech companies as teenagers.
+You are evaluating whether someone is a strong fit for TKS (The Knowledge Society) — \
+a 10-month program exclusively for students aged 13–17 who want to work on hard problems \
+in AI, biotech, climate, and other frontier areas.
 
-Score this profile 0.0–10.0 on fit with TKS.
+CRITICAL: If the profile shows any sign this person is an adult professional (job title, \
+company role, PhD, many years of experience, large following), score them 0–2 immediately. \
+TKS only accepts students aged 13–17.
 
-High (8–10): Actively building real projects, hackathon winner/finalist, strong GitHub \
-presence, clearly driven by curiosity and impact — not just grades.
-Mid (4–7): Shows promise but unclear depth, age uncertain, or limited public work.
-Low (0–3): Casual hobbyist, tutorial-level projects, likely outside age range.
+Score 0.0–10.0:
+High (8–10): Clearly a teen, actively building real projects, hackathon winner/finalist, \
+strong GitHub, driven by curiosity and impact.
+Mid (5–7): Likely a student, shows promise but limited public work or unclear depth.
+Low (3–4): Possibly a student but very little signal.
+Very low (0–2): Adult professional, or clearly outside the 13–17 age range.
 
-Return ONLY valid JSON: {{"score": 7.5, "reason": "one sentence, max 15 words"}}
+Return ONLY raw JSON, no markdown: {{"score": 7.5, "reason": "one sentence, max 15 words"}}
 
 Profile:
 {profile}"""

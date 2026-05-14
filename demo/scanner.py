@@ -23,15 +23,52 @@ def _signal_id(source: str, external_id: str) -> str:
     return hashlib.sha256(f"{source}:{external_id}".encode()).hexdigest()[:16]
 
 
+_ADULT_FLAGS = [
+    "senior", "lead engineer", "staff engineer", "principal", "architect",
+    "vp ", "director", "manager", "cto", "ceo", "founder", "co-founder",
+    "phd", "professor", "researcher at", "engineer at", "developer at",
+    "years of experience", "10+", "15+", "20+", "ex-google", "ex-meta",
+    "ex-amazon", "ex-facebook", "alumni", "graduated",
+]
+
+_STUDENT_FLAGS = [
+    "high school", "highschool", "grade ", "student", "teen", "teenager",
+    "16", "17", "15", "14", "13", "hs ", "h.s.", "isef", "hackathon",
+    "first robotics", "frc", "aspiring",
+]
+
+
+def _is_adult_professional(profile: dict) -> bool:
+    bio = (profile.get("bio") or "").lower()
+    company = (profile.get("company") or "").lower()
+    combined = f"{bio} {company}"
+
+    # If any strong student signal, keep them
+    if any(flag in combined for flag in _STUDENT_FLAGS):
+        return False
+
+    # If adult red flags present, skip
+    if any(flag in combined for flag in _ADULT_FLAGS):
+        return True
+
+    # If account is very old and has many followers, likely not a teen
+    followers = profile.get("followers") or 0
+    if followers > 500:
+        return True
+
+    return False
+
+
 async def scan_github(client: httpx.AsyncClient) -> list[dict]:
     signals = []
     seen: set[str] = set()
 
-    # Search by city for student/teen developers
+    # Search by city for student/teen developers — student-specific terms only
     for city in TARGET_CITIES[:6]:  # limit to avoid rate limits in demo
         queries = [
-            f"location:{city} followers:>10 repos:>3",
-            f"location:{city} hackathon",
+            f"location:{city} high school student",
+            f"location:{city} hackathon student",
+            f"location:{city} high-school",
         ]
         for query in queries:
             try:
@@ -56,6 +93,11 @@ async def scan_github(client: httpx.AsyncClient) -> list[dict]:
                 # Fetch profile for bio + location
                 profile = await _fetch_github_profile(client, username)
                 if not profile:
+                    continue
+
+                # Skip obvious adult professionals
+                if _is_adult_professional(profile):
+                    log.debug(f"Skipping {username} — looks like an adult professional")
                     continue
 
                 # Try to find their top repo
